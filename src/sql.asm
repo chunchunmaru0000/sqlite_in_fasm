@@ -13,7 +13,10 @@ section '.data' data readable writeable
     text_step_return db    '[ STEP    RETURNED ] %lld', 10, 0
     text_destroy_return db '[ DESTROY RETURNED ] %lld', 10, 0
     
-    text_user_record db '[ ID ] %ddl [ NAME ] %s [ AGE ] %lld', 10, 0
+    text_user_record db '[ ID ] %lld [ NAME ] %s [ AGE ] %lld', 10, 0
+    id dq 0
+    name dq 0 ; char[] ptr
+    age dq 0
     
     a db 'some ___ %lld ___', 10, 0
     b dq 123
@@ -60,7 +63,7 @@ _main:
 ; ######################################
 ; DO SOME INSERTS
 ; ######################################
-    mov r14, 10
+    mov r14, 3
     l:  push insert_query       ; push command
         call prepare            ; prepare command
         add rsp, 8              ; restore stack
@@ -72,7 +75,7 @@ _main:
 ; ######################################
 ; SELECT *
 ; ######################################
-    push select_all_query ; push command
+    push select_all_query   ; push command
     call prepare            ; prepare command
     add rsp, 8              ; restore stack
     call step_scalar        ; execute statement
@@ -88,16 +91,47 @@ exit:
 step_scalar:
     sub rsp, 40
 
-;int sqlite3_step(sqlite3_stmt*);  
-    mov rcx, [statement]
-    call [sqlite_step]
-    
-    mov rcx, text_step_return
-    mov rdx, rax
-    call [printf]
+    do_step:
+    ;int sqlite3_step(sqlite3_stmt*);  
+        mov rcx, [statement]
+        call [sqlite_step]
+        mov r13, rax
+        
+        mov rcx, text_step_return
+        mov rdx, rax
+        call [printf]
+        
+        cmp r13, SQLITE_ROW
+        je print_data
     
     add rsp, 40
     ret
+print_data:
+; ##### https://www.sqlite.org/c3ref/column_blob.html #####
+;sqlite3_int64 | sqlite3_column_int64(sqlite3_stmt*, int iCol);
+;const unsigned char *| sqlite3_column_text(sqlite3_stmt*, int iCol);
+    mov rcx, [statement]
+    mov rdx, 0
+    call [sqlite_column_int64]
+    mov [id], rax
+    
+    mov rcx, [statement]
+    mov rdx, 1
+    call [sqlite_column_text]
+    mov [name], rax
+    
+    mov rcx, [statement]
+    mov rdx, 2
+    call [sqlite_column_int64]
+    mov [age], rax
+    
+    mov rcx, text_user_record
+    mov rdx, [id]
+    mov r8, [name]
+    mov r9, [age]
+    call [printf]
+    
+    jmp do_step
 
 destroy:
     sub rsp, 40
@@ -196,4 +230,6 @@ section '.idata' import readable writeable
         sqlite_close, 'sqlite3_close', \
         sqlite_prepare, 'sqlite3_prepare_v2', \
         sqlite_step, 'sqlite3_step', \
-        sqlite_finalize, 'sqlite3_finalize'
+        sqlite_finalize, 'sqlite3_finalize', \
+        sqlite_column_int64, 'sqlite3_column_int64', \
+        sqlite_column_text, 'sqlite3_column_text'
