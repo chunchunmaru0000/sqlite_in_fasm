@@ -1,0 +1,2 @@
+An example of using https://www.sqlite.org/2025/sqlite-dll-win-x64-3490100.zip from https://www.sqlite.org/download.html in x64 FASM on Windows <br>
+Documentation: https://www.sqlite.org/c3ref/funclist.html <br>
