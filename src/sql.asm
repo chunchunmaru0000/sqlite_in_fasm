@@ -26,6 +26,7 @@ section '.data' data readable writeable
     db_file_name db 'asdf.db', 0
     sql_connection dq 0 ; sqlite3 object **
     statement dq 0      ; sqlite3_stmt **
+    null dq 0
     
     SQLITE_ROW equ 100
     SQLITE_DONE equ 101
@@ -47,37 +48,31 @@ section '.code' executable
 entry _main
 
 _main:
+    push rbp
+    mov rbp, rsp
 ; ######################################
 ; OPEN CONNECTION
 ; ######################################
-    sub rsp, 40 ; Shadow space
     call begin
 ; ######################################
 ; CREATE TABLE
 ; ######################################
-    push create_table_query ; push command
-    call prepare            ; prepare command
-    add rsp, 8              ; restore stack after push command
-    call step               ; execute statement
-    call destroy            ; destroy statement object
+    mov rcx, create_table_query
+    call execute
 ; ######################################
 ; DO SOME INSERTS
 ; ######################################
-    mov r14, 3
-    l:  push insert_query       ; push command
-        call prepare            ; prepare command
-        add rsp, 8              ; restore stack
-        call step               ; execute statement
-        call destroy            ; destroy statement object
+    mov r14, 2
+    l:  mov rcx, insert_query
+        call execute
         dec r14
         cmp r14, 0
         jnz l
 ; ######################################
 ; SELECT *
 ; ######################################
-    push select_all_query   ; push command
+    mov rcx, select_all_query   ; push command
     call prepare            ; prepare command
-    add rsp, 8              ; restore stack
     call step_scalar        ; execute statement
     call destroy            ; destroy statement object
 ; ######################################
@@ -87,10 +82,16 @@ _main:
 exit:
     invoke ExitProcess, 0
 
+execute:
+    sub rsp, 8
+    call prepare            ; prepare command
+    call step               ; execute statement
+    call destroy            ; destroy statement object
+    add rsp, 8
+    ret
 
 step_scalar:
-    sub rsp, 40
-
+    sub rsp, 40 ; 40 since push rbp is 8 + 32 of shaadow space
     do_step:
     ;int sqlite3_step(sqlite3_stmt*);  
         mov rcx, [statement]
@@ -135,7 +136,6 @@ print_data:
 
 destroy:
     sub rsp, 40
-    
 ;int sqlite3_finalize(sqlite3_stmt *pStmt);
     mov rcx, [statement]
     call [sqlite_finalize]
@@ -143,13 +143,11 @@ destroy:
     mov rcx, text_destroy_return
     mov rdx, rax
     call [printf]
-    
     add rsp, 40
     ret
 
 step:
     sub rsp, 40
-
 ;int sqlite3_step(sqlite3_stmt*);  
     mov rcx, [statement]
     call [sqlite_step]
@@ -157,14 +155,11 @@ step:
     mov rcx, text_step_return
     mov rdx, rax
     call [printf]
-    
     add rsp, 40
     ret
 
 prepare:
-    mov r13, [rsp+8] ; 8 bytes for [call prepare] instruction pointer
-    sub rsp, 40
-
+    mov r13, rcx ; save query in rcx
 ;int sqlite3_prepare_v2(
 ; connection
 ;     sqlite3 *db,            /* Database handle */
@@ -176,6 +171,7 @@ prepare:
 ;     sqlite3_stmt **ppStmt,  /* OUT: Statement handle */
 ;     const char **pzTail     /* OUT: Pointer to unused portion of zSql */
 ;);
+    sub rsp, 40
     mov rcx, text_prapare_begin
     mov rdx, r13
     call [printf]
@@ -185,38 +181,32 @@ prepare:
     xor r8, r8
     dec r8 ; r8 = -1 so negative nByte
     mov r9, statement
-    push qword 0 ; **pzTail = null
+    mov qword[rsp + 32], null ; since i dont use rbp i can do so
+;   sub rsp, 32
     call [sqlite_prepare]
+;   add rsp, 32
     
     mov rcx, text_prapare_end
     call [printf]
-    
-    add rsp, 48 ; + 8 for push qword 0
+    add rsp, 40
     ret
 
-
 begin:
-    sub rsp, 40
-    
     mov rcx, db_file_name
     mov rdx, sql_connection
+    sub rsp, 40
     call [sqlite_open]
-    
     mov rcx, text_begin
     call [printf]
-    
     add rsp, 40
     ret
     
 ending:
     sub rsp, 40
-   
     mov rcx, [sql_connection]
     call [sqlite_close]
-    
     mov rcx, text_end
     call [printf]
-    
     add rsp, 40
     ret
     
